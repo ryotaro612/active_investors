@@ -8,6 +8,7 @@ greenlet==0.4.16
 ipython==7.16.1
 ipython-genutils==0.2.0
 jedi==0.17.1
+jsonlines==1.2.0
 msgpack==1.0.0
 neovim==0.3.1
 parso==0.7.0
