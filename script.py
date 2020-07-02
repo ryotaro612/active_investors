@@ -5,6 +5,7 @@ import functools
 import argparse
 import logging as lo
 import typing as t
+import jsonlines
 
 
 def get_logger():
@@ -179,7 +180,9 @@ def write_report(investor_funding_rounds, funding_round_map, output):
     """
     """
     funding_round_types = list(set(funding_round_map.values()))
-    with open(output, "w") as stream:
+    with open(output, "w") as stream, jsonlines.open(
+        "debug.jsonl", "w"
+    ) as debug_stream:
         writer = csv.writer(stream)
 
         writer.writerow(
@@ -200,6 +203,9 @@ def write_report(investor_funding_rounds, funding_round_map, output):
                     funding_round["investment_type"]
                 ]
                 counter[funding_round_type].append(funding_round["org_uuid"])
+            debug_stream.write(
+                dict(**{"uuid": uuid, "name": investor["name"]}, **counter)
+            )
             count = dict(
                 (funding_round_type, len(set(disruptors)))
                 for funding_round_type, disruptors in counter.items()
