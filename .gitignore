@@ -2,3 +2,4 @@ venv
 companies.csv
 .vscode
 .python-version
+datasets
