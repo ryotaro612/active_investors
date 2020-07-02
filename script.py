@@ -1,6 +1,7 @@
 import sys
 import csv
 import collections as coll
+import functools
 import argparse
 import logging as lo
 import typing as t
@@ -14,9 +15,13 @@ def get_logger():
 
 def build_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("company_file")
-    parser.add_argument("daily_report_dir")
-    parser.add_argument("output")
+    for argument_name in [
+        "company_file",
+        "daily_report_dir",
+        "funding_round_convert_map",
+        "output",
+    ]:
+        parser.add_argument(argument_name)
     return parser
 
 
@@ -36,9 +41,11 @@ def parse(args: t.List[str]):
 def read_companies(company_csv) -> t.Dict[str, str]:
     """
 
-    Examples
+    Returns
     --------
-    {'Asana': 'xxxx..xx-yyyy-xxxx'}
+    dict
+
+    {'Asana': '<crunchbase organization uuid>', ..}
 
     """
     with open(company_csv) as f:
@@ -56,6 +63,15 @@ def find_funding_rounds(
     companies: t.Dict[str, str], funding_rounds: t.List[t.Dict[str, str]]
 ):
     """
+    Returns
+    -------
+    dict
+        {
+            <company id>: {
+                'name': <company name>,
+                'funding_rounds': [<fuinding_round>, ..]
+            }, ..
+        }
     """
     return dict(
         (
@@ -74,15 +90,23 @@ def find_funding_rounds(
 
 
 def find_active_investors(disruptors, investments):
-    """
+    """Return active investors that have invested to disruptors.
+
     Parameters
     ----------
     disruptors: dict
         '<UUID>':
+
+    Returns
+    -------
+    dict
+
+    {<investor id>: <investor name>, ..}
+
     """
     funding_round_uuids = [
         funding_round["uuid"]
-        for disruptor_uuid, disruptor in disruptors.items()
+        for _, disruptor in disruptors.items()
         for funding_round in disruptor["funding_rounds"]
     ]
 
@@ -151,32 +175,74 @@ def find_funding_round_types(funding_rounds):
     )
 
 
-def write_report(investor_funding_rounds, funding_round_types, output):
+def write_report(investor_funding_rounds, funding_round_map, output):
     """
     """
+    funding_round_types = list(set(funding_round_map.values()))
     with open(output, "w") as stream:
         writer = csv.writer(stream)
 
         writer.writerow(
             ["active investor uuid", "name"]
             + funding_round_types
-            + ["all types"]
+            + ["all funding statges"]
         )
 
         for uuid, investor in investor_funding_rounds.items():
             fundamental = [uuid, investor["name"]]
             funding_rounds = investor["funding_rounds"]
-            count = coll.Counter(
-                [
+            counter = dict(
+                (funding_round_type, [])
+                for funding_round_type in funding_round_types
+            )
+            for funding_round in funding_rounds:
+                funding_round_type = funding_round_map[
                     funding_round["investment_type"]
-                    for funding_round in funding_rounds
                 ]
+                counter[funding_round_type].append(funding_round["org_uuid"])
+            count = dict(
+                (funding_round_type, len(set(disruptors)))
+                for funding_round_type, disruptors in counter.items()
             )
             per_type = [
                 count.get(funding_round_type, 0)
                 for funding_round_type in funding_round_types
             ]
-            writer.writerow(fundamental + per_type + [len(funding_rounds)])
+
+            all_counter = len(
+                set(
+                    funding_round["org_uuid"]
+                    for funding_round in funding_rounds
+                )
+            )
+            writer.writerow(fundamental + per_type + [all_counter])
+
+
+def read_funding_round_map(filename):
+    with open(filename) as f:
+        reader = csv.reader(f)
+        next(reader)
+        return dict((record[0], record[1]) for record in reader)
+
+
+def filter_by_disruptors(investor_funding_rounds, companies):
+    """
+    """
+    disruptor_uuids = list(companies.values())
+    return dict(
+        (
+            investor_id,
+            {
+                "name": investor_profile["name"],
+                "funding_rounds": [
+                    funding_round
+                    for funding_round in investor_profile["funding_rounds"]
+                    if funding_round["org_uuid"] in disruptor_uuids
+                ],
+            },
+        )
+        for investor_id, investor_profile in investor_funding_rounds.items()
+    )
 
 
 if __name__ == "__main__":
@@ -192,5 +258,13 @@ if __name__ == "__main__":
     investor_funding_rounds = find_investor_funding_rounds(
         investor_funding_round_uuids, funding_rounds
     )
-    funding_round_types = find_funding_round_types(funding_rounds)
-    write_report(investor_funding_rounds, funding_round_types, options.output)
+    active_investor_funding_rounds = filter_by_disruptors(
+        investor_funding_rounds, companies
+    )
+    funding_round_map = read_funding_round_map(
+        options.funding_round_convert_map
+    )
+    write_report(
+        active_investor_funding_rounds, funding_round_map, options.output
+    )
+
