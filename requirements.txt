@@ -5,7 +5,7 @@ black==19.10b0
 click==7.1.2
 decorator==4.4.2
 greenlet==0.4.16
-ipython==7.16.1
+ipython==7.16.3
 ipython-genutils==0.2.0
 jedi==0.17.1
 jsonlines==1.2.0
